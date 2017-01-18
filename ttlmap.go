@@ -1,11 +1,19 @@
 package ttlmap
 
-import "time"
+import (
+	"errors"
+	"sync"
+	"time"
+)
 
 var (
-	// ErrKeyExists happens, when try to add an item with a key that already
-	// exists in the map.
-	ErrKeyExists error
+	// ErrKeyAlreadyExists happens, when try to add an item with a key which is
+	// already exists in the map.
+	ErrKeyAlreadyExists = errors.New("key is already exists")
+
+	// ErrNilKeyIsNotAcceptable happens, when someone try to operate with nil
+	// valued key.
+	ErrNilKeyIsNotAcceptable = errors.New("nil key is not acceptable")
 
 	// ErrItemNotFound happens, when try to update an item, but it not
 	// found by key.
@@ -20,7 +28,8 @@ var (
 // with elements which has expiration time.
 type TTLMap interface {
 	// Insert a new element to the map. If the key is exists, return with an
-	// "ErrKeyExists" error.
+	// "ErrKeyExists" error, and when key is nil then return with
+	// "ErrNilKeyIsNotAcceptable" error.
 	// If the expiration is "nil" the item is never expired.
 	Insert(key, value interface{}, expiration time.Duration) error
 
@@ -44,15 +53,33 @@ type TTLMap interface {
 	Remove(key interface{}) error
 }
 
-type ttlMap struct{}
+type ttlMap struct {
+	mutex sync.RWMutex
+	items map[interface{}]interface{}
+}
 
 // New is instantiate a TTLMap. Every new TTLMap is fully empty, so not
 // contains items.
 func New() TTLMap {
-	return &ttlMap{}
+	return &ttlMap{items: make(map[interface{}]interface{})}
 }
 
 func (m *ttlMap) Insert(key, value interface{}, expiration time.Duration) error {
+	if isNil(key) {
+		return ErrNilKeyIsNotAcceptable
+	}
+
+	m.mutex.RLock()
+	if _, exists := m.items[key]; exists {
+		m.mutex.RUnlock()
+		return ErrKeyAlreadyExists
+	}
+	m.mutex.RUnlock()
+
+	m.mutex.Lock()
+	m.items[key] = value
+	m.mutex.Unlock()
+
 	return nil
 }
 
@@ -70,4 +97,8 @@ func (m *ttlMap) Get(key interface{}) (interface{}, error) {
 
 func (m *ttlMap) Remove(key interface{}) error {
 	return nil
+}
+
+func isNil(v interface{}) bool {
+	return v == nil
 }
