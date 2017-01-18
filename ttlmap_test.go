@@ -7,7 +7,13 @@ import (
 )
 
 func TestNewFunc(t *testing.T) {
-	if ttlmap.New() != nil {
-		t.Error("ttlmap.New() must return with nil currently")
+	m := ttlmap.New()
+
+	if m == nil {
+		t.Error("ttlmap.New() shouldn't return with nil")
+	}
+
+	if _, implements := interface{}(m).(ttlmap.TTLMap); !implements {
+		t.Error("ttlmap.New() must return with a ttlmap.TTLMap implementation")
 	}
 }

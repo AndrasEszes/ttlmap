@@ -44,8 +44,30 @@ type TTLMap interface {
 	Remove(key interface{}) error
 }
 
+type ttlMap struct{}
+
 // New is instantiate a TTLMap. Every new TTLMap is fully empty, so not
 // contains items.
 func New() TTLMap {
+	return &ttlMap{}
+}
+
+func (m *ttlMap) Insert(key, value interface{}, expiration time.Duration) error {
+	return nil
+}
+
+func (m *ttlMap) Update(key, value interface{}, expiration time.Duration) error {
+	return nil
+}
+
+func (m *ttlMap) Has(key interface{}) bool {
+	return false
+}
+
+func (m *ttlMap) Get(key interface{}) (interface{}, error) {
+	return nil, nil
+}
+
+func (m *ttlMap) Remove(key interface{}) error {
 	return nil
 }
