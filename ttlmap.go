@@ -6,6 +6,11 @@ import (
 	"time"
 )
 
+const (
+	// Never is a helper const for easy to add item to map which never expires.
+	Never = time.Duration(-11223344)
+)
+
 var (
 	// ErrKeyAlreadyExists happens, when try to add an item with a key which is
 	// already exists in the map.
@@ -17,11 +22,11 @@ var (
 
 	// ErrItemNotFound happens, when try to update an item, but it not
 	// found by key.
-	ErrItemNotFound error
+	ErrItemNotFound = errors.New("key is not exists")
 
 	// ErrItemIsExpired happens, when the item is exists in the map, but already
 	// expired (gc is not removed yet)
-	ErrItemIsExpired error
+	ErrItemIsExpired = errors.New("item is expired")
 )
 
 // TTLMap is the main public interface type of package. A TTLMap contains a map
@@ -30,12 +35,12 @@ type TTLMap interface {
 	// Insert a new element to the map. If the key is exists, return with an
 	// "ErrKeyExists" error, and when key is nil then return with
 	// "ErrNilKeyIsNotAcceptable" error.
-	// If the expiration is "nil" the item is never expired.
+	// If the expiration is "ttlmap.Never" the item is never expired.
 	Insert(key, value interface{}, expiration time.Duration) error
 
 	// Update is an existing item's value and expiration. If the item is not
 	// found by key, then return with an "ErrItemNotFound" error.
-	// If the expiration is "nil" remove the expiration from the element.
+	// If the expiration is "ttlmap.Never" remove the expiration from the element.
 	Update(key, value interface{}, expiration time.Duration) error
 
 	// Has is just checking the given key is exists in the current map or not.
@@ -55,13 +60,18 @@ type TTLMap interface {
 
 type ttlMap struct {
 	mutex sync.RWMutex
-	items map[interface{}]interface{}
+	items map[interface{}]*ttlMapItem
+}
+
+type ttlMapItem struct {
+	value      interface{}
+	expiration *time.Time
 }
 
 // New is instantiate a TTLMap. Every new TTLMap is fully empty, so not
 // contains items.
 func New() TTLMap {
-	return &ttlMap{items: make(map[interface{}]interface{})}
+	return &ttlMap{items: make(map[interface{}]*ttlMapItem)}
 }
 
 func (m *ttlMap) Insert(key, value interface{}, expiration time.Duration) error {
@@ -69,34 +79,70 @@ func (m *ttlMap) Insert(key, value interface{}, expiration time.Duration) error 
 		return ErrNilKeyIsNotAcceptable
 	}
 
-	m.mutex.RLock()
-	if _, exists := m.items[key]; exists {
-		m.mutex.RUnlock()
+	if m.Has(key) {
 		return ErrKeyAlreadyExists
 	}
-	m.mutex.RUnlock()
 
-	m.mutex.Lock()
-	m.items[key] = value
-	m.mutex.Unlock()
+	m.setValue(key, value, expiration)
 
 	return nil
 }
 
 func (m *ttlMap) Update(key, value interface{}, expiration time.Duration) error {
+	if isNil(key) {
+		return ErrNilKeyIsNotAcceptable
+	}
+
+	if !m.Has(key) {
+		return ErrItemNotFound
+	}
+
+	m.setValue(key, value, expiration)
+
 	return nil
 }
 
 func (m *ttlMap) Has(key interface{}) bool {
-	return false
+	m.mutex.RLock()
+	_, exists := m.items[key]
+	m.mutex.RUnlock()
+	return exists
 }
 
 func (m *ttlMap) Get(key interface{}) (interface{}, error) {
-	return nil, nil
+	m.mutex.RLock()
+	item, exists := m.items[key]
+	m.mutex.RUnlock()
+
+	switch {
+	case !exists:
+		return nil, ErrItemNotFound
+	case item.expiration == nil:
+		return item.value, nil
+	case time.Now().After(*item.expiration):
+		return nil, ErrItemIsExpired
+	default:
+		return item.value, nil
+	}
 }
 
 func (m *ttlMap) Remove(key interface{}) error {
 	return nil
+}
+
+func (m *ttlMap) setValue(key, value interface{}, expiration time.Duration) {
+	m.mutex.Lock()
+	m.items[key] = &ttlMapItem{
+		value: value,
+		expiration: func() *time.Time {
+			if expiration == Never {
+				return nil
+			}
+			t := time.Now().Add(expiration)
+			return &t
+		}(),
+	}
+	m.mutex.Unlock()
 }
 
 func isNil(v interface{}) bool {
