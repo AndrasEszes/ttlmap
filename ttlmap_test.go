@@ -134,3 +134,37 @@ func TestGetMethod(t *testing.T) {
 		})
 	}
 }
+
+func TestRemoveMethod(t *testing.T) {
+	m := ttlmap.New()
+
+	fixtures := []struct {
+		key, val interface{}
+		ttl      time.Duration
+	}{
+		{s{"a", "b"}, s{"c", "d"}, 0},
+		{s{"e", "f"}, s{"g", "h"}, ttlmap.Never},
+	}
+
+	for _, f := range fixtures {
+		if err := m.Insert(f.key, f.val, f.ttl); err != nil {
+			t.Error(err)
+		}
+
+		if !m.Has(f.key) {
+			t.Errorf("%v not inserted", f.key)
+		}
+
+		if err := m.Remove(f.key); err != nil {
+			t.Error(err)
+		}
+
+		if m.Has(f.key) {
+			t.Errorf("%v not removed", f.key)
+		}
+	}
+
+	if err := m.Remove(nil); err == nil {
+		t.Error("should got", ttlmap.ErrNilKeyIsNotAcceptable, "error")
+	}
+}

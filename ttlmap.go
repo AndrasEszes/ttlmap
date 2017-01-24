@@ -53,8 +53,7 @@ type TTLMap interface {
 	Get(key interface{}) (interface{}, error)
 
 	// Remove an item from the map by key. If the item is not found, then return
-	// with an "ErrItemNotFound" error, otherwise the item is exists, but
-	// already expired, then return an "ErrItemIsExpired" error.
+	// with an "ErrItemNotFound" error.
 	Remove(key interface{}) error
 }
 
@@ -127,6 +126,14 @@ func (m *ttlMap) Get(key interface{}) (interface{}, error) {
 }
 
 func (m *ttlMap) Remove(key interface{}) error {
+	if isNil(key) {
+		return ErrNilKeyIsNotAcceptable
+	}
+
+	m.mutex.Lock()
+	delete(m.items, key)
+	m.mutex.Unlock()
+
 	return nil
 }
 
